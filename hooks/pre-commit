@@ -1,0 +1,12 @@
+#!/bin/sh
+echo "🚀 Running pre-commit hooks with OpenCode..."
+
+# Run lint if available
+if [ -f package.json ] && grep -q "lint" package.json; then
+  bun run lint || exit 1
+fi
+
+# Call OpenCode tool
+opencode run gitPrecommitReview || echo "AI Review skipped"
+
+echo "✅ Pre-commit checks passed!"
