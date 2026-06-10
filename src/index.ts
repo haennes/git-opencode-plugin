@@ -8,6 +8,7 @@ You have dedicated Git tools. Prefer them over raw \`git\` shell commands:
 | \`gitStatus\` | Check working tree, staged/unstaged files |
 | \`gitDiff\` | View unstaged, staged, or branch diffs |
 | \`gitLog\` | Recent commits, branch history |
+| \`gitTree\` | Commit graph with branch topology |
 | \`gitBranch\` | List, create, or switch branches |
 | \`gitCommit\` | Stage files and commit (with message) |
 | \`gitStash\` | Stash, pop, list, or drop changes |
@@ -74,7 +75,7 @@ export const GitToolsPlugin: Plugin = async ({ client, directory, $ }) => {
       if (!inRepo) return;
       output.context.push(`
 ## Git Tools (opencode-git-tools)
-Prefer plugin tools: gitStatus, gitDiff, gitLog, gitBranch, gitCommit, gitStash, gitPrecommitReview.
+Prefer plugin tools: gitStatus, gitDiff, gitLog, gitTree, gitBranch, gitCommit, gitStash, gitPrecommitReview.
 Repo root: ${root}
 `);
     },
@@ -116,6 +117,28 @@ Repo root: ${root}
         async execute(args) {
           const format = args.oneline ? "--oneline" : "";
           return (await $`git -C ${directory} log -n ${args.count} ${format}`.text()).trim();
+        },
+      }),
+
+      gitTree: tool({
+        description:
+          "Show Git commit tree graph with branch topology (prefer over bash git log --graph)",
+        args: {
+          count: tool.schema.number().optional().default(20),
+          all: tool.schema
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("Include all local and remote branches"),
+          ref: tool.schema.string().optional().describe("Start from ref, e.g. main or HEAD~5"),
+        },
+        async execute(args) {
+          const allFlag = args.all ? "--all" : "";
+          const ref = args.ref ?? "";
+          const tree = (
+            await $`git -C ${directory} log --graph --oneline --decorate ${allFlag} -n ${args.count} ${ref}`
+          ).text().trim();
+          return tree || "No commits.";
         },
       }),
 

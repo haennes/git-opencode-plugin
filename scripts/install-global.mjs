@@ -145,8 +145,8 @@ async function main() {
 
   console.log("\nDone! Restart OpenCode to load the plugin.");
   console.log("Auto-loaded from: ~/.config/opencode/plugins/");
-  console.log("Tools: gitStatus, gitDiff, gitLog, gitBranch, gitCommit, gitStash, gitPrecommitReview");
-  console.log("Commands: /git-status, /git-commit, /git-review");
+  console.log("Tools: gitStatus, gitDiff, gitLog, gitTree, gitBranch, gitCommit, gitStash, gitPrecommitReview");
+  console.log("Commands: /git-status, /git-tree, /git-commit, /git-review");
 }
 
 main().catch((err) => {

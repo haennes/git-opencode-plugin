@@ -4,10 +4,10 @@ Global OpenCode plugin that registers Git tools and **automatically guides the A
 
 ## Features
 
-- **7 Git tools**: `gitStatus`, `gitDiff`, `gitLog`, `gitBranch`, `gitCommit`, `gitStash`, `gitPrecommitReview`
+- **8 Git tools**: `gitStatus`, `gitDiff`, `gitLog`, `gitTree`, `gitBranch`, `gitCommit`, `gitStash`, `gitPrecommitReview`
 - **Auto-context injection**: When working inside a Git repo, the plugin injects tool guidance into the first user message
 - **Compaction context**: Git workflow hints survive session compaction
-- **Slash commands**: `/git-status`, `/git-commit`, `/git-review`
+- **Slash commands**: `/git-status`, `/git-tree`, `/git-commit`, `/git-review`
 - **Optional pre-commit hook**: Calls `opencode run gitPrecommitReview` before commits
 
 ## Install (recommended)
@@ -102,6 +102,7 @@ scripts/              # install-global.mjs, install-git-hooks.mjs
 | `gitStatus` | Working tree status |
 | `gitDiff` | Unstaged, staged, or ref diff |
 | `gitLog` | Recent commits |
+| `gitTree` | Commit graph with branch topology |
 | `gitBranch` | List / create / switch branches |
 | `gitCommit` | Stage and commit |
 | `gitStash` | Stash push / pop / list / drop |
