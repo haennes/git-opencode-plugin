@@ -86,11 +86,16 @@ See `opencode.json.example` for a full config snippet.
 3. **Compaction hook** — Re-injects Git tool reminders when context is compacted.
 4. **Slash commands** — Explicit workflows (`/git-commit`, etc.) that reference plugin tools by name.
 
+## Documentation
+
+- **[OpenCode Tools 製作流程參考](docs/OPENCODE_TOOLS_GUIDE.md)** — 從零建立 Plugin、自訂 Tools、Hooks、Slash Commands 的完整步驟（含本專案實作解析、檢查清單與最小範本）
+
 ## Project structure
 
 ```
 src/index.ts          # Main plugin (tools + hooks)
 commands/             # Global slash commands (copied on install)
+docs/                 # Developer guides
 hooks/                # Optional git pre-commit hooks
 scripts/              # install-global.mjs, install-git-hooks.mjs
 ```
@@ -104,6 +109,6 @@ scripts/              # install-global.mjs, install-git-hooks.mjs
 | `gitLog` | Recent commits |
 | `gitTree` | Commit graph with branch topology |
 | `gitBranch` | List / create / switch branches |
-| `gitCommit` | Stage and commit |
+| `gitCommit` | Stage and commit (quiet output, formatted summary) |
 | `gitStash` | Stash push / pop / list / drop |
 | `gitPrecommitReview` | Review staged changes before commit |

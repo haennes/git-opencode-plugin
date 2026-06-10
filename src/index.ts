@@ -1,4 +1,10 @@
+import { unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type Plugin, tool } from "@opencode-ai/plugin";
+
+/** Suppress CRLF conversion warnings on Windows (keeps tool output readable). */
+const GIT_CRLF_QUIET = "-c advice.convertCRLF=false";
 
 const GIT_TOOLS_GUIDANCE = `<GIT_TOOLS_PLUGIN>
 You have dedicated Git tools. Prefer them over raw \`git\` shell commands:
@@ -15,6 +21,11 @@ You have dedicated Git tools. Prefer them over raw \`git\` shell commands:
 | \`gitPrecommitReview\` | Review staged changes before committing |
 
 Workflow: \`gitStatus\` → \`gitDiff staged:true\` → \`gitPrecommitReview\` → \`gitCommit\`.
+
+Commit display rules (keep terminal clean):
+- NEVER run bash \`git commit -m "..."\` — long inline messages clutter the terminal.
+- ALWAYS use \`gitCommit\` — writes message via file, suppresses CRLF noise, returns a short summary.
+- Subject (first line): ≤72 chars. Put details in the body after a blank line, not as shell bullets.
 </GIT_TOOLS_PLUGIN>`;
 
 type Shell = Plugin extends (input: infer I) => unknown ? I["$"] : never;
@@ -34,6 +45,64 @@ async function gitRoot($: Shell, directory: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** Strip noisy git warnings (e.g. CRLF on Windows) from tool output. */
+function sanitizeGitOutput(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !/^warning: in the working copy of /i.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeCommitMessage(message: string): string {
+  return message.replace(/\r\n/g, "\n").trim();
+}
+
+function formatCommitResult(input: {
+  hash: string;
+  subject: string;
+  branch: string;
+  filesChanged: number;
+  insertions: number;
+  deletions: number;
+}): string {
+  const { hash, subject, branch, filesChanged, insertions, deletions } = input;
+  const stat =
+    filesChanged > 0
+      ? `${filesChanged} file${filesChanged === 1 ? "" : "s"} changed, ${insertions} insertion${insertions === 1 ? "" : "s"}(+), ${deletions} deletion${deletions === 1 ? "" : "s"}(-)`
+      : "no file stats";
+  return [
+    `Committed ${hash} on ${branch || "(detached)"}`,
+    subject,
+    stat,
+  ].join("\n");
+}
+
+async function parseLastCommitStat(
+  $: Shell,
+  directory: string,
+): Promise<{ filesChanged: number; insertions: number; deletions: number }> {
+  const raw = sanitizeGitOutput(
+    (await $`git -C ${directory} show --stat --format= HEAD`.text()).trim(),
+  );
+  const summary = raw
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => /files? changed/.test(line));
+  if (!summary) {
+    return { filesChanged: 0, insertions: 0, deletions: 0 };
+  }
+  const filesMatch = summary.match(/(\d+)\s+files? changed/);
+  const insMatch = summary.match(/(\d+)\s+insertions?\(\+\)/);
+  const delMatch = summary.match(/(\d+)\s+deletions?\(-\)/);
+  return {
+    filesChanged: filesMatch ? Number(filesMatch[1]) : 0,
+    insertions: insMatch ? Number(insMatch[1]) : 0,
+    deletions: delMatch ? Number(delMatch[1]) : 0,
+  };
 }
 
 export const GitToolsPlugin: Plugin = async ({ client, directory, $ }) => {
@@ -56,7 +125,9 @@ export const GitToolsPlugin: Plugin = async ({ client, directory, $ }) => {
         (item) => typeof item === "string" && item.includes(marker),
       );
       if (!hasMarker) {
-        config.instructions.push("opencode-git-tools: prefer git* plugin tools over raw git bash");
+        config.instructions.push(
+          "opencode-git-tools: prefer git* plugin tools over raw git bash; never git commit -m in shell — use gitCommit",
+        );
       }
     },
 
@@ -76,6 +147,7 @@ export const GitToolsPlugin: Plugin = async ({ client, directory, $ }) => {
       output.context.push(`
 ## Git Tools (opencode-git-tools)
 Prefer plugin tools: gitStatus, gitDiff, gitLog, gitTree, gitBranch, gitCommit, gitStash, gitPrecommitReview.
+Never use bash \`git commit -m\` — use gitCommit for quiet, formatted output.
 Repo root: ${root}
 `);
     },
@@ -88,7 +160,9 @@ Repo root: ${root}
         },
         async execute(args) {
           const flags = args.porcelain ? "--porcelain" : "";
-          return (await $`git -C ${directory} status ${flags}`.text()).trim();
+          return sanitizeGitOutput(
+            (await $`git ${GIT_CRLF_QUIET} -C ${directory} status ${flags}`.text()).trim(),
+          );
         },
       }),
 
@@ -100,10 +174,15 @@ Repo root: ${root}
         },
         async execute(args) {
           if (args.ref) {
-            return (await $`git -C ${directory} diff ${args.ref}`.text()).trim() || "No diff.";
+            const diff = sanitizeGitOutput(
+              (await $`git ${GIT_CRLF_QUIET} -C ${directory} diff ${args.ref}`.text()).trim(),
+            );
+            return diff || "No diff.";
           }
           const flags = args.staged ? "--cached" : "";
-          const diff = (await $`git -C ${directory} diff ${flags}`.text()).trim();
+          const diff = sanitizeGitOutput(
+            (await $`git ${GIT_CRLF_QUIET} -C ${directory} diff ${flags}`.text()).trim(),
+          );
           return diff || "No diff.";
         },
       }),
@@ -143,21 +222,46 @@ Repo root: ${root}
       }),
 
       gitCommit: tool({
-        description: "Stage files and create a Git commit",
+        description:
+          "Stage files and create a Git commit (quiet output; prefer over bash git commit -m)",
         args: {
-          message: tool.schema.string().describe("Commit message"),
+          message: tool.schema
+            .string()
+            .describe("Commit message (subject ≤72 chars; body after blank line)"),
           files: tool.schema.array(tool.schema.string()).optional(),
           amend: tool.schema.boolean().optional().default(false),
         },
         async execute(args) {
-          if (args.files?.length) {
-            await $`git -C ${directory} add ${args.files}`;
-          } else {
-            await $`git -C ${directory} add -A`;
+          const msgPath = join(tmpdir(), `oc-git-commit-${Date.now()}.txt`);
+          const message = normalizeCommitMessage(args.message);
+
+          try {
+            await writeFile(msgPath, message, "utf8");
+
+            if (args.files?.length) {
+              await $`git ${GIT_CRLF_QUIET} -C ${directory} add ${args.files}`;
+            } else {
+              await $`git ${GIT_CRLF_QUIET} -C ${directory} add -A`;
+            }
+
+            const amendFlag = args.amend ? "--amend" : "";
+            await $`git ${GIT_CRLF_QUIET} -C ${directory} commit -F ${msgPath} -q ${amendFlag}`;
+
+            const hash = (
+              await $`git -C ${directory} rev-parse --short HEAD`.text()
+            ).trim();
+            const subject = (
+              await $`git -C ${directory} log -1 --format=%s`.text()
+            ).trim();
+            const branch = (
+              await $`git -C ${directory} branch --show-current`.text()
+            ).trim();
+            const stat = await parseLastCommitStat($, directory);
+
+            return formatCommitResult({ hash, subject, branch, ...stat });
+          } finally {
+            await unlink(msgPath).catch(() => {});
           }
-          const flags = args.amend ? "--amend" : "";
-          const result = await $`git -C ${directory} commit -m ${args.message} ${flags}`.text();
-          return `Commit successful:\n${result.trim()}`;
         },
       }),
 
