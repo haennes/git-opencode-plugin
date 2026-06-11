@@ -353,6 +353,12 @@ warning: in the working copy of 'README.md', LF will be replaced by CRLF...
 1. **源頭抑制**：`-c advice.convertCRLF=false`
 2. **輸出過濾**：`sanitizeGitOutput()` 移除 warning 行
 
+> 注意：在 Bun/OpenCode 的 `$` template 中，不要把
+> `"-c advice.convertCRLF=false"` 做成一個字串再插值。插值會被視為單一
+> argv，Git 會報 `unknown option: -c advice.convertCRLF=false`。請保持
+> `git -c ${configValue} ...` 或 `git -c advice.convertCRLF=false ...` 的 token
+> 順序。
+
 ```typescript
 function sanitizeGitOutput(text: string): string {
   return text

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { type Plugin, tool } from "@opencode-ai/plugin";
 
 /** Suppress CRLF conversion warnings on Windows (keeps tool output readable). */
-const GIT_CRLF_QUIET = "-c advice.convertCRLF=false";
+const GIT_CRLF_ADVICE = "advice.convertCRLF=false";
 
 const GIT_TOOLS_GUIDANCE = `<GIT_TOOLS_PLUGIN>
 You have dedicated Git tools. Prefer them over raw \`git\` shell commands:
@@ -161,7 +161,7 @@ Repo root: ${root}
         async execute(args) {
           const flags = args.porcelain ? "--porcelain" : "";
           return sanitizeGitOutput(
-            (await $`git ${GIT_CRLF_QUIET} -C ${directory} status ${flags}`.text()).trim(),
+            (await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} status ${flags}`.text()).trim(),
           );
         },
       }),
@@ -175,13 +175,13 @@ Repo root: ${root}
         async execute(args) {
           if (args.ref) {
             const diff = sanitizeGitOutput(
-              (await $`git ${GIT_CRLF_QUIET} -C ${directory} diff ${args.ref}`.text()).trim(),
+              (await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} diff ${args.ref}`.text()).trim(),
             );
             return diff || "No diff.";
           }
           const flags = args.staged ? "--cached" : "";
           const diff = sanitizeGitOutput(
-            (await $`git ${GIT_CRLF_QUIET} -C ${directory} diff ${flags}`.text()).trim(),
+            (await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} diff ${flags}`.text()).trim(),
           );
           return diff || "No diff.";
         },
@@ -239,13 +239,13 @@ Repo root: ${root}
             await writeFile(msgPath, message, "utf8");
 
             if (args.files?.length) {
-              await $`git ${GIT_CRLF_QUIET} -C ${directory} add ${args.files}`;
+              await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} add ${args.files}`;
             } else {
-              await $`git ${GIT_CRLF_QUIET} -C ${directory} add -A`;
+              await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} add -A`;
             }
 
             const amendFlag = args.amend ? "--amend" : "";
-            await $`git ${GIT_CRLF_QUIET} -C ${directory} commit -F ${msgPath} -q ${amendFlag}`;
+            await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} commit -F ${msgPath} -q ${amendFlag}`;
 
             const hash = (
               await $`git -C ${directory} rev-parse --short HEAD`.text()

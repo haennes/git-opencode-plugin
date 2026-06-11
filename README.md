@@ -133,6 +133,8 @@ output noisy.
 3. Run `gitPrecommitReview` before committing staged changes
 4. Do not run `git reset --hard`, force push, or delete branches without user confirmation
 5. Pair with [git-bash-opencode-plugin](https://github.com/stevenke1981/git-bash-opencode-plugin) for Unix shell tools
+6. When editing plugin code, keep `git -c advice.convertCRLF=false` as separate
+   argv tokens; do not interpolate `"-c advice.convertCRLF=false"` as one string
 
 <!-- END_AGENT_README -->
 
