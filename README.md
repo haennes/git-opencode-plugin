@@ -135,6 +135,8 @@ output noisy.
 5. Pair with [git-bash-opencode-plugin](https://github.com/stevenke1981/git-bash-opencode-plugin) for Unix shell tools
 6. When editing plugin code, keep `git -c advice.convertCRLF=false` as separate
    argv tokens; do not interpolate `"-c advice.convertCRLF=false"` as one string
+7. Never pass `""` as an optional argv placeholder; branch the command instead
+   and filter empty file path strings before `git add`
 
 <!-- END_AGENT_README -->
 

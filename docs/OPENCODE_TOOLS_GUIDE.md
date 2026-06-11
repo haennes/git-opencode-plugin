@@ -444,6 +444,8 @@ const output = (await $`git -C ${directory} diff --cached`.text()).trim();
 **避免：**
 
 - 把超長文字直接放進 template literal 當 `-m` 參數
+- 用 `""` 當 optional flag/path 的佔位參數；請分支組合命令
+- 未過濾空字串就把 file path array 傳給 `git add`
 - 回傳未處理的 stderr 警告
 - 在 plugin 裡用 `console.log`（改用 `client.app.log`）
 

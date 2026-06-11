@@ -61,6 +61,15 @@ function normalizeCommitMessage(message: string): string {
   return message.replace(/\r\n/g, "\n").trim();
 }
 
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function cleanPathspecs(files: string[] | undefined): string[] {
+  return files?.map((file) => file.trim()).filter(Boolean) ?? [];
+}
+
 function formatCommitResult(input: {
   hash: string;
   subject: string;
@@ -159,9 +168,13 @@ Repo root: ${root}
           porcelain: tool.schema.boolean().optional().default(false),
         },
         async execute(args) {
-          const flags = args.porcelain ? "--porcelain" : "";
+          if (args.porcelain) {
+            return sanitizeGitOutput(
+              (await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} status --porcelain`.text()).trim(),
+            );
+          }
           return sanitizeGitOutput(
-            (await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} status ${flags}`.text()).trim(),
+            (await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} status`.text()).trim(),
           );
         },
       }),
@@ -173,16 +186,17 @@ Repo root: ${root}
           ref: tool.schema.string().optional().describe("Compare against ref, e.g. main or HEAD~1"),
         },
         async execute(args) {
-          if (args.ref) {
+          const ref = nonEmpty(args.ref);
+          if (ref) {
             const diff = sanitizeGitOutput(
-              (await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} diff ${args.ref}`.text()).trim(),
+              (await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} diff ${ref}`.text()).trim(),
             );
             return diff || "No diff.";
           }
-          const flags = args.staged ? "--cached" : "";
-          const diff = sanitizeGitOutput(
-            (await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} diff ${flags}`.text()).trim(),
-          );
+          const raw = args.staged
+            ? await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} diff --cached`.text()
+            : await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} diff`.text();
+          const diff = sanitizeGitOutput(raw.trim());
           return diff || "No diff.";
         },
       }),
@@ -194,8 +208,10 @@ Repo root: ${root}
           oneline: tool.schema.boolean().optional().default(true),
         },
         async execute(args) {
-          const format = args.oneline ? "--oneline" : "";
-          return (await $`git -C ${directory} log -n ${args.count} ${format}`.text()).trim();
+          if (args.oneline) {
+            return (await $`git -C ${directory} log -n ${args.count} --oneline`.text()).trim();
+          }
+          return (await $`git -C ${directory} log -n ${args.count}`.text()).trim();
         },
       }),
 
@@ -212,10 +228,27 @@ Repo root: ${root}
           ref: tool.schema.string().optional().describe("Start from ref, e.g. main or HEAD~5"),
         },
         async execute(args) {
-          const allFlag = args.all ? "--all" : "";
-          const ref = args.ref ?? "";
+          const ref = nonEmpty(args.ref);
+          if (args.all && ref) {
+            const tree = (
+              await $`git -C ${directory} log --graph --oneline --decorate --all -n ${args.count} ${ref}`
+            ).text().trim();
+            return tree || "No commits.";
+          }
+          if (args.all) {
+            const tree = (
+              await $`git -C ${directory} log --graph --oneline --decorate --all -n ${args.count}`
+            ).text().trim();
+            return tree || "No commits.";
+          }
+          if (ref) {
+            const tree = (
+              await $`git -C ${directory} log --graph --oneline --decorate -n ${args.count} ${ref}`
+            ).text().trim();
+            return tree || "No commits.";
+          }
           const tree = (
-            await $`git -C ${directory} log --graph --oneline --decorate ${allFlag} -n ${args.count} ${ref}`
+            await $`git -C ${directory} log --graph --oneline --decorate -n ${args.count}`
           ).text().trim();
           return tree || "No commits.";
         },
@@ -238,14 +271,18 @@ Repo root: ${root}
           try {
             await writeFile(msgPath, message, "utf8");
 
-            if (args.files?.length) {
-              await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} add ${args.files}`;
+            const files = cleanPathspecs(args.files);
+            if (files.length) {
+              await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} add ${files}`.quiet();
             } else {
-              await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} add -A`;
+              await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} add -A`.quiet();
             }
 
-            const amendFlag = args.amend ? "--amend" : "";
-            await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} commit -F ${msgPath} -q ${amendFlag}`;
+            if (args.amend) {
+              await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} commit -F ${msgPath} -q --amend`.quiet();
+            } else {
+              await $`git -c ${GIT_CRLF_ADVICE} -C ${directory} commit -F ${msgPath} -q`.quiet();
+            }
 
             const hash = (
               await $`git -C ${directory} rev-parse --short HEAD`.text()
@@ -297,8 +334,11 @@ Repo root: ${root}
             return (await $`git -C ${directory} stash list`.text()).trim() || "No stashes.";
           }
           if (args.action === "push") {
-            const msg = args.message ? `push -m ${args.message}` : "push";
-            return (await $`git -C ${directory} stash ${msg}`.text()).trim();
+            const message = nonEmpty(args.message);
+            if (message) {
+              return (await $`git -C ${directory} stash push -m ${message}`.text()).trim();
+            }
+            return (await $`git -C ${directory} stash push`.text()).trim();
           }
           if (args.action === "pop") {
             return (await $`git -C ${directory} stash pop stash@{${args.index}}`.text()).trim();
