@@ -10,11 +10,13 @@ Global OpenCode plugin that registers Git tools and **automatically guides the A
 - **Slash commands**: `/git-status`, `/git-tree`, `/git-commit`, `/git-review`
 - **Optional pre-commit hook**: Calls `opencode run gitPrecommitReview` before commits
 
-## Install (recommended)
+## For humans — quick start
+
+### Install (recommended)
 
 OpenCode loads plugins from `~/.config/opencode/plugins/` automatically at startup.
 
-### One-step installer
+#### One-step installer
 
 **Windows**
 
@@ -30,7 +32,19 @@ bash install.sh
 
 Add `--hooks` (or `-Hooks` on Windows) to also install pre-commit hooks in the **current** git project.
 
-### Legacy / partial installers
+#### What gets installed
+
+| Path | Purpose |
+|------|---------|
+| `~/.config/opencode/plugins/opencode-git-tools.ts` | Plugin entrypoint |
+| `~/.config/opencode/commands/git-*.md` | Slash commands |
+| `~/.config/opencode/package.json` | Local plugin dependency metadata |
+
+This plugin is a single TypeScript entrypoint, so it is safe to install directly
+in the plugins root. Plugins with helper modules should use a subdirectory with
+an `index.ts` entrypoint.
+
+#### Legacy / partial installers
 
 | Script | Purpose |
 |--------|---------|
@@ -41,7 +55,7 @@ Add `--hooks` (or `-Hooks` on Windows) to also install pre-commit hooks in the *
 
 After install, **restart OpenCode**.
 
-## Verify
+### Verify
 
 ```bash
 opencode run "call gitStatus and show the result"
@@ -49,7 +63,7 @@ opencode run "call gitStatus and show the result"
 
 Or in the TUI, run `/git-status`.
 
-## Optional: project git hooks
+### Optional: project git hooks
 
 Install pre-commit hooks in the **current** git project:
 
@@ -78,6 +92,49 @@ Register in `~/.config/opencode/opencode.jsonc`:
 ```
 
 See `opencode.json.example` for a full config snippet.
+
+## For AI agents — operating instructions
+
+<!-- AGENT_README: opencode-git-tools v1.0 -->
+
+You have **git\*** plugin tools. Prefer them over raw shell `git` commands,
+especially on Windows where long command strings and CRLF warnings make terminal
+output noisy.
+
+### Decision: when to USE git*
+
+| Task | Tool |
+|------|------|
+| See current worktree state | `gitStatus` |
+| Review unstaged or staged changes | `gitDiff` |
+| Inspect recent commits | `gitLog` |
+| See branch topology | `gitTree` |
+| List/create/switch branches | `gitBranch` |
+| Stage and commit | `gitCommit` |
+| Stash work | `gitStash` |
+| Review staged diff before commit | `gitPrecommitReview` |
+
+**Commit workflow:** `gitStatus` → `gitDiff` → `gitPrecommitReview` →
+`gitCommit`.
+
+### Decision: when NOT to use
+
+| Situation | Use instead |
+|-----------|-------------|
+| Non-git file search | `Read` / `Grep` / codebase-memory-mcp |
+| Bash-specific scripts | `bashExec` from git-bash-opencode-plugin |
+| User explicitly asks for raw command output | Shell is OK, but explain why |
+| Destructive git operations | Ask first |
+
+### Rules
+
+1. Use `gitCommit` instead of `git commit -m`; it writes messages through a file
+2. Keep commit subjects <= 72 chars; put details in the body
+3. Run `gitPrecommitReview` before committing staged changes
+4. Do not run `git reset --hard`, force push, or delete branches without user confirmation
+5. Pair with [git-bash-opencode-plugin](https://github.com/stevenke1981/git-bash-opencode-plugin) for Unix shell tools
+
+<!-- END_AGENT_README -->
 
 ## How auto-call works
 
